@@ -23,6 +23,16 @@ USER_AGENT = "daily-fact-telegram-bot/1.0 (contact: channel owner)"
 
 
 def pick_fact() -> tuple[dict, int]:
+    # Если задан FACT_INDEX (ручной запуск с параметром) — берём факт по номеру,
+    # это удобно для тестов. Иначе выбираем по дате, как в обычном ежедневном режиме.
+    override = os.environ.get("FACT_INDEX", "").strip()
+    if override:
+        try:
+            idx = int(override) % len(FACTS)
+            return FACTS[idx], idx
+        except ValueError:
+            print(f"Некорректный FACT_INDEX={override!r}, использую выбор по дате", file=sys.stderr)
+
     day_index = datetime.date.today().toordinal() % len(FACTS)
     return FACTS[day_index], day_index
 
