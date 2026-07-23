@@ -5,7 +5,12 @@ on:
     # 06:00 UTC = 09:00 по Москве (Россия не переходит на летнее время,
     # смещение UTC+3 постоянное, поэтому время можно не подстраивать)
     - cron: '0 6 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      fact_index:
+        description: 'Номер факта для теста (0-62). Пусто = выбор по сегодняшней дате.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -14,9 +19,9 @@ jobs:
   post:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
 
@@ -26,6 +31,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL: ${{ secrets.TELEGRAM_CHANNEL }}
+          FACT_INDEX: ${{ inputs.fact_index }}
         run: python post.py
 
       - name: Закоммитить лог
