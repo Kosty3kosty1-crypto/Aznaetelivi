@@ -11,6 +11,7 @@
 """
 import os
 import sys
+import re
 import json
 import datetime
 import urllib.parse
@@ -46,8 +47,26 @@ def pick_fact() -> tuple[dict, int]:
         except ValueError:
             print(f"Некорректный FACT_INDEX={override!r}, использую выбор по дате", file=sys.stderr)
 
-    day_index = datetime.date.today().toordinal() % len(FACTS)
-    return FACTS[day_index], day_index
+    # Обычный режим: берём факт, который не публиковался дольше всех (или ни разу).
+    # История берётся из log.txt, поэтому повторов не будет, пока не пройдут все факты,
+    # а новые факты, добавленные в facts.py, выйдут в первую очередь.
+    last_pos: dict[int, int] = {}
+    try:
+        with open("log.txt", encoding="utf-8") as f:
+            for pos, line in enumerate(f):
+                if "[тест]" in line:
+                    continue
+                m = re.search(r"факт #(\d+)", line)
+                if m:
+                    last_pos[int(m.group(1))] = pos
+    except FileNotFoundError:
+        pass
+
+    if not last_pos:
+        idx = datetime.date.today().toordinal() % len(FACTS)
+    else:
+        idx = min(range(len(FACTS)), key=lambda i: last_pos.get(i, -1))
+    return FACTS[idx], idx
 
 
 def _is_good_image(page_title: str, info: dict) -> bool:
@@ -159,13 +178,23 @@ def find_wikipedia_images(title: str, count: int) -> list[str]:
 
 
 def find_images(title: str, count: int = IMAGES_PER_POST) -> list[str]:
-    """Собирает до `count` картинок из разных источников: сперва Openverse
-    (Flickr, музейные архивы и другие сайты — не только Wikipedia), затем
-    добирает недостающее из самой статьи Wikipedia."""
+    """Собирает до `count` картинок. Первая (главная, с подписью) картинка —
+    всегда с Wikipedia: она энциклопедически точная и не подведёт с тем,
+    что на ней изображено. Остальные добираются с Openverse (Flickr, музейные
+    архивы и другие сайты) для разнообразия — Openverse ищет по ключевым
+    словам без кураторства и иногда путает похожие по названию вещи
+    (например, мемы и пародии), поэтому для главного кадра ему не доверяем."""
     if not title:
         return []
 
-    images: list[str] = find_openverse_images(title, count=2)
+    images: list[str] = find_wikipedia_images(title, count=1)
+
+    if len(images) < count:
+        for url in find_openverse_images(title, count=count - len(images) + 1):
+            if url not in images:
+                images.append(url)
+            if len(images) >= count:
+                break
 
     if len(images) < count:
         for url in find_wikipedia_images(title, count=count):
@@ -263,7 +292,8 @@ def main():
     # Ведём небольшой лог — это заодно создаёт ежедневный коммит в репозитории,
     # чтобы GitHub не отключил задачу по расписанию из-за "неактивности".
     with open("log.txt", "a", encoding="utf-8") as f:
-        f.write(f"{datetime.date.today().isoformat()} — факт #{idx}, {mode}\n")
+        test_mark = " [тест]" if os.environ.get("FACT_INDEX", "").strip() else ""
+        f.write(f"{datetime.date.today().isoformat()} — факт #{idx}, {mode}{test_mark}\n")
 
 
 if __name__ == "__main__":
